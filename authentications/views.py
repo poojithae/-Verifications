@@ -5,24 +5,18 @@ from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
 from .utils import send_otp
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .models import UserModel, UserProfile
-from .serializers import UserSerializer, UserProfileSerializer
+from .serializers import UserSerializer, UserProfileSerializer, LoginSerializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.pagination import PageNumberPagination
 from django_filters import rest_framework as filters
-#from rest_framework.throttling import UserRateThrottle
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core.mail import send_mail
-from django.contrib.auth import get_user_model, login, logout
-#from django.contrib.auth.views import PasswordResetView, PasswordResetConfirmView, PasswordResetCompleteView, PasswordResetDoneView
 from django.utils.timezone import now, timedelta
-from django.urls import reverse
 import csv
 import os
 from .utils import send_verification_email, generate_verification_token
@@ -41,9 +35,6 @@ class UserFilter(filters.FilterSet):
     class Meta:
         model = UserModel
         fields = ['phone_number', 'email']
-
-# class CustomRateThrottle(UserRateThrottle):
-#     rate = '5/minute'
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -159,37 +150,46 @@ def register_user(request):
     # Send verification email
     send_verification_email(email, token)
 
-    return Response({'message': 'Registration successful. Please check your email for verification.'})
-# Verify email view
+    return Response({'message': 'Registration successful. Please check your email for verification.'}, status=status.HTTP_201_CREATED)
+
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def verify_email(request, token):
     try:
         user = UserModel.objects.get(otp=token)
         if user.otp_expiry >= now():
             user.is_active = True
-            user.otp = ''  # Clear the OTP after successful verification
+            user.otp = ''  
             user.otp_expiry = None
             user.save()
-            return JsonResponse({'message': 'Email verified successfully.'})
+            return JsonResponse({'message': 'Email verified successfully.'}, status=status.HTTP_200_OK)
         else:
             return JsonResponse({'error': 'Token has expired.'}, status=status.HTTP_400_BAD_REQUEST)
     except UserModel.DoesNotExist:
         return JsonResponse({'error': 'Invalid token.'}, status=status.HTTP_400_BAD_REQUEST)
-    
+
+
+
 @api_view(['POST'])
+@csrf_exempt
 @permission_classes([AllowAny])
 def login_user(request):
-    serializer = UserSerializer(data=request.data)
+    serializer = LoginSerializer(data=request.data)
     if serializer.is_valid():
-        user = get_object_or_404(UserModel, phone_number=serializer.validated_data['phone_number'])
-        if user.check_password(serializer.validated_data['password1']):
+        phone_number = serializer.validated_data['phone_number']
+        password = serializer.validated_data['password']
+        
+        user = get_object_or_404(UserModel, phone_number=phone_number)
+        if user.check_password(password):
             refresh = RefreshToken.for_user(user)
             return Response({
                 'refresh': str(refresh),
                 'access': str(refresh.access_token),
             })
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
+    
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -197,39 +197,20 @@ def logout_user(request):
     request.user.auth_token.delete()
     return Response({'message': 'Logged out successfully'}, status=status.HTTP_200_OK)
 
-# class PasswordResetRequestView(PasswordResetView):
-#     email_template_name = 'password_reset_email.html'
-#     subject_template_name = 'password_reset_subject.txt'
-#     success_url = '/api/password-reset/done/'
-
-# class PasswordResetConfirmView(PasswordResetConfirmView):
-#     success_url = '/api/password-reset/complete/'
-
-# class PasswordResetCompleteView(PasswordResetCompleteView):
-#     template_name = 'password_reset_complete.html'
-
-# class PasswordResetDoneView(PasswordResetDoneView):
-#     template_name = 'password_reset_done.html'
-
-
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def getfile_csv(request):
     """
     API view to generate a CSV file with user data and save it locally.
     """
-    # Define the file path and name
     file_name = "usersname.csv"
     file_path = os.path.join(settings.BASE_DIR, file_name)
 
-    #To Get all users
     users = UserModel.objects.all()
 
-    #To Create a CSV file and write the user data
     with open(file_path, mode='w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
-        #To Write the header
         writer.writerow(['Phone Number', 'Email', 'Is Active', 'Date Registered'])
-        #To Write the user data
         for user in users:
             writer.writerow([
                 user.phone_number,

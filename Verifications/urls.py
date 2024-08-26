@@ -26,20 +26,15 @@ router.register("profiles", views.UserProfileViewSet, basename="profile")
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api-auth/', include('rest_framework.urls')),
+    path('api-auth/', include('rest_framework.urls')),   
     path('api/', include(router.urls)),
     path('api/register/', views.register_user, name='register_user'),
-    path('api/verify-email/<token>/', views.verify_email, name='verify_email'),
-    path('api/login/', views.login_user, name='login_user'),
+    path('verify-email/<str:token>/', views.verify_email, name='verify_email'), 
+    path('login/', views.login_user, name='login_user'),  
     path('api/logout/', views.logout_user, name='logout_user'),
     path('api/token/', jwt_views.TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', jwt_views.TokenRefreshView.as_view(), name='token_refresh'),
     path('api/csv/', views.getfile_csv, name='csv_export'),
-    
-    # path('api/password-reset/', views.PasswordResetRequestView.as_view(), name='password_reset_request'),
-    # path('api/password-reset/confirm/<uidb64>/<token>/', views.PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
-    # path('api/password-reset/done/', views.PasswordResetDoneView.as_view(), name='password_reset_done'),
-    # path('api/password-reset/complete/', views.PasswordResetCompleteView.as_view(), name='password_reset_complete'),
-    
+
 ]
 
